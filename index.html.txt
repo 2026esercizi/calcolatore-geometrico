@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calcolatore Geometrico Avanzato</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useMemo } = React;
+        
+        const GeometricCalculator = () => {
+          const [shape, setShape] = useState('cylinder');
+          const [calcType, setCalcType] = useState('dimToVol');
+          const [solidType, setSolidType] = useState('solid');
+          const [innerShape, setInnerShape] = useState('cylinder');
+          const [showFormulas, setShowFormulas] = useState(false);
+          
+          const [inputs, setInputs] = useState({});
+          const [innerInputs, setInnerInputs] = useState({});
+          const [outerMaterial, setOuterMaterial] = useState('acciaio');
+          const [innerMaterial, setInnerMaterial] = useState('aria');
+          const [customDensity, setCustomDensity] = useState('');
+          const [customInnerDensity, setCustomInnerDensity] = useState('');
+          const [fluidDensity, setFluidDensity] = useState('1.00');
+
+          const materials = {
+            'acciaio': 7.85,
+            'alluminio': 2.70,
+            'rame': 8.96,
+            'ottone': 8.50,
+            'bronzo': 8.80,
+            'piombo': 11.34,
+            'titanio': 4.51,
+            'pvc': 1.40,
+            'poliuretano': 1.30,
+            'legno': 0.75,
+            'acqua': 1.00,
+            'acqua_mare': 1.025,
+            'calcestruzzo': 2.40,
+            'vetro': 2.50,
+            'oro': 19.32,
+            'argento': 10.49,
+            'aria': 0.0012,
+            'vuoto': 0,
+            'custom': 'custom'
+          };
+
+          const shapes = {
+            'cylinder': 'Cilindro',
+            'parallelepiped': 'Parallelepipedo',
+            'cone': 'Cono',
+            'pyramid': 'Piramide',
+            'truncated_pyramid': 'Tronco di Piramide',
+            'obelisk': 'Obelisco',
+            'sphere': 'Sfera',
+            'spherical_sector': 'Settore Sferico',
+            'spherical_segment_1': 'Segmento Sferico (1 base)',
+            'spherical_segment_2': 'Segmento Sferico (2 basi)',
+            'cube': 'Cubo'
+          };
+
+          const calcTypes = {
+            'dimToVol': 'Dimensioni → Volume',
+            'dimToSurf': 'Dimensioni → Superficie',
+            'dimDensToWeight': 'Dimensioni + Densità → Peso',
+            'volDensToWeight': 'Volume + Densità → Peso',
+            'weightDimToDens': 'Peso + Dimensioni → Densità',
+            'weightDensToVol': 'Peso + Densità → Volume'
+          };
+
+          const getShapeInputs = (shapeType) => {
+            const inputs = {
+              'cylinder': ['raggio', 'altezza'],
+              'parallelepiped': ['lunghezza', 'larghezza', 'altezza'],
+              'cone': ['raggio_base', 'altezza'],
+              'pyramid': ['lato_base', 'altezza'],
+              'truncated_pyramid': ['lato_base_inf', 'lato_base_sup', 'altezza'],
+              'obelisk': ['largh_base', 'lung_base', 'largh_sommita', 'lung_sommita', 'altezza'],
+              'sphere': ['raggio'],
+              'spherical_sector': ['raggio', 'altezza'],
+              'spherical_segment_1': ['raggio', 'altezza'],
+              'spherical_segment_2': ['raggio', 'altezza1', 'altezza2'],
+              'cube': ['lato']
+            };
+            return inputs[shapeType] || [];
+          };
+
+          const calculateVolume = (shapeType, dims) => {
+            const PI = Math.PI;
+            switch(shapeType) {
+              case 'cylinder':
+                return PI * dims.raggio * dims.raggio * dims.altezza;
+              case 'parallelepiped':
+                return dims.lunghezza * dims.larghezza * dims.altezza;
+              case 'cone':
+                return (1/3) * PI * dims.raggio_base * dims.raggio_base * dims.altezza;
+              case 'pyramid':
+                return (1/3) * dims.lato_base * dims.lato_base * dims.altezza;
+              case 'truncated_pyramid':
+                const A1 = dims.lato_base_inf * dims.lato_base_inf;
+                const A2 = dims.lato_base_sup * dims.lato_base_sup;
+                return (dims.altezza / 3) * (A1 + A2 + Math.sqrt(A1 * A2));
+              case 'obelisk':
+                const Ab = dims.largh_base * dims.lung_base;
+                const As = dims.largh_sommita * dims.lung_sommita;
+                return (dims.altezza / 3) * (Ab + As + Math.sqrt(Ab * As));
+              case 'sphere':
+                return (4/3) * PI * Math.pow(dims.raggio, 3);
+              case 'spherical_sector':
+                return (2/3) * PI * dims.raggio * dims.raggio * dims.altezza;
+              case 'spherical_segment_1':
+                return (PI * dims.altezza * dims.altezza / 3) * (3 * dims.raggio - dims.altezza);
+              case 'spherical_segment_2':
+                const h = dims.altezza1 + dims.altezza2;
+                return (PI * h / 6) * (3 * dims.altezza1 * dims.altezza1 + 3 * dims.altezza2 * dims.altezza2 + h * h);
+              case 'cube':
+                return Math.pow(dims.lato, 3);
+              default:
+                return 0;
+            }
+          };
+
+          const calculateSurface = (shapeType, dims) => {
+            const PI = Math.PI;
+            switch(shapeType) {
+              case 'cylinder':
+                return 2 * PI * dims.raggio * (dims.raggio + dims.altezza);
+              case 'parallelepiped':
+                return 2 * (dims.lunghezza * dims.larghezza + dims.lunghezza * dims.altezza + dims.larghezza * dims.altezza);
+              case 'cone':
+                const slant = Math.sqrt(dims.raggio_base * dims.raggio_base + dims.altezza * dims.altezza);
+                return PI * dims.raggio_base * (dims.raggio_base + slant);
+              case 'pyramid':
+                const slantPyr = Math.sqrt((dims.lato_base/2) * (dims.lato_base/2) + dims.altezza * dims.altezza);
+                return dims.lato_base * dims.lato_base + 2 * dims.lato_base * slantPyr;
+              case 'truncated_pyramid':
+                const perimInf = 4 * dims.lato_base_inf;
+                const perimSup = 4 * dims.lato_base_sup;
+                const apotema = Math.sqrt(dims.altezza * dims.altezza + Math.pow((dims.lato_base_inf - dims.lato_base_sup)/2, 2));
+                return dims.lato_base_inf * dims.lato_base_inf + dims.lato_base_sup * dims.lato_base_sup + ((perimInf + perimSup) / 2) * apotema;
+              case 'sphere':
+                return 4 * PI * dims.raggio * dims.raggio;
+              case 'spherical_sector':
+                return PI * dims.raggio * (2 * dims.raggio + Math.sqrt(dims.raggio * dims.raggio - dims.altezza * dims.altezza));
+              case 'cube':
+                return 6 * dims.lato * dims.lato;
+              default:
+                return 0;
+            }
+          };
+
+          const convertInputsToDims = (inputObj) => {
+            const dims = {};
+            Object.keys(inputObj).forEach(key => {
+              dims[key] = parseFloat(inputObj[key]) || 0;
+            });
+            return dims;
+          };
+
+          const getDensity = (material, customValue) => {
+            if (material === 'custom') {
+              return parseFloat(customValue) || 0;
+            }
+            return materials[material] || 0;
+          };
+
+          const results = useMemo(() => {
+            try {
+              const dims = convertInputsToDims(inputs);
+              const innerDims = convertInputsToDims(innerInputs);
+              
+              const dimsInDm = {};
+              Object.keys(dims).forEach(key => {
+                dimsInDm[key] = dims[key] / 100;
+              });
+              
+              const innerDimsInDm = {};
+              Object.keys(innerDims).forEach(key => {
+                innerDimsInDm[key] = innerDims[key] / 100;
+              });
+
+              let outerVolume = calculateVolume(shape, dimsInDm);
+              let innerVolume = solidType !== 'solid' ? calculateVolume(innerShape, innerDimsInDm) : 0;
+              let netVolume = outerVolume - innerVolume;
+              
+              let surface = calculateSurface(shape, dimsInDm);
+              surface = surface * 0.01;
+              
+              const density = getDensity(outerMaterial, customDensity);
+              const innerDens = getDensity(innerMaterial, customInnerDensity);
+
+              let result = {};
+
+              switch(calcType) {
+                case 'dimToVol':
+                  result = {
+                    volume_esterno: outerVolume.toFixed(4),
+                    volume_interno: innerVolume.toFixed(4),
+                    volume_netto: netVolume.toFixed(4),
+                    unit: 'dm³ (L)'
+                  };
+                  break;
+                
+                case 'dimToSurf':
+                  result = {
+                    superficie_esterna: surface.toFixed(4),
+                    unit: 'm²'
+                  };
+                  break;
+                
+                case 'dimDensToWeight':
+                  let outerWeight = netVolume * density;
+                  let innerWeight = solidType === 'double_density' ? innerVolume * innerDens : 0;
+                  let totalWeight = outerWeight + innerWeight;
+                  
+                  result = {
+                    peso_materiale_esterno: outerWeight.toFixed(4),
+                    peso_materiale_interno: innerWeight.toFixed(4),
+                    peso_totale: totalWeight.toFixed(4),
+                    volume_netto: netVolume.toFixed(4),
+                    densita_esterna: density.toFixed(4),
+                    densita_interna: innerDens.toFixed(4),
+                    unit: 'kg'
+                  };
+                  break;
+                
+                case 'volDensToWeight':
+                  const vol = parseFloat(inputs.volume) || 0;
+                  const weight = vol * density;
+                  result = {
+                    peso: weight.toFixed(4),
+                    volume: vol.toFixed(4),
+                    densita: density.toFixed(4),
+                    unit: 'kg'
+                  };
+                  break;
+                
+                case 'weightDimToDens':
+                  const peso = parseFloat(inputs.peso) || 0;
+                  const calculatedDens = netVolume > 0 ? peso / netVolume : 0;
+                  result = {
+                    densita: calculatedDens.toFixed(4),
+                    peso: peso.toFixed(4),
+                    volume_netto: netVolume.toFixed(4),
+                    unit: 'kg/dm³'
+                  };
+                  break;
+                
+                case 'weightDensToVol':
+                  const weight2 = parseFloat(inputs.peso) || 0;
+                  const dens2 = getDensity(outerMaterial, customDensity);
+                  const calculatedVol = dens2 > 0 ? weight2 / dens2 : 0;
+                  result = {
+                    volume: calculatedVol.toFixed(4),
+                    peso: weight2.toFixed(4),
+                    densita: dens2.toFixed(4),
+                    unit: 'dm³ (L)'
+                  };
+                  break;
+              }
+
+              if (solidType !== 'solid' && outerVolume > 0) {
+                const fluidDens = parseFloat(fluidDensity) || 1.0;
+                const thrust_N = fluidDens * outerVolume * 9.81;
+                const thrust_kgf = thrust_N / 9.81;
+                result.spinta_archimede_N = thrust_N.toFixed(4);
+                result.spinta_archimede_kgf = thrust_kgf.toFixed(4);
+              }
+
+              return result;
+            } catch (e) {
+              return { error: 'Errore nel calcolo' };
+            }
+          }, [shape, calcType, solidType, innerShape, inputs, innerInputs, outerMaterial, innerMaterial, customDensity, customInnerDensity, fluidDensity]);
+
+          const handleInputChange = (key, value) => {
+            setInputs(prev => ({ ...prev, [key]: value }));
+          };
+
+          const handleInnerInputChange = (key, value) => {
+            setInnerInputs(prev => ({ ...prev, [key]: value }));
+          };
+
+          const needsDensity = ['dimDensToWeight', 'volDensToWeight', 'weightDensToVol'].includes(calcType);
+          const needsWeight = ['weightDimToDens', 'weightDensToVol'].includes(calcType);
+          const needsVolume = ['volDensToWeight'].includes(calcType);
+          const needsDimensions = ['dimToVol', 'dimToSurf', 'dimDensToWeight', 'weightDimToDens'].includes(calcType);
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+              <div className="max-w-6xl mx-auto">
+                <div className="bg-white rounded-xl shadow-xl p-6 mb-6">
+                  <div className="flex items-center gap-3 mb-6 border-b pb-4">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <h1 className="text-3xl font-bold text-gray-800">Calcolatore Geometrico Avanzato</h1>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Forma Geometrica</label>
+                      <select 
+                        value={shape} 
+                        onChange={(e) => setShape(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {Object.entries(shapes).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo di Calcolo</label>
+                      <select 
+                        value={calcType} 
+                        onChange={(e) => setCalcType(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {Object.entries(calcTypes).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo di Solido</label>
+                      <select 
+                        value={solidType} 
+                        onChange={(e) => setSolidType(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="solid">Solido Pieno</option>
+                        <option value="hollow">Solido Cavo</option>
+                        <option value="double_density">Doppia Densità</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {solidType !== 'solid' && (
+                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="font-semibold text-gray-800 mb-3">Forma Interna</h3>
+                      <select 
+                        value={innerShape} 
+                        onChange={(e) => setInnerShape(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+                      >
+                        {Object.entries(shapes).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                      
+                      {needsDimensions && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {getShapeInputs(innerShape).map(input => (
+                            <div key={input}>
+                              <label className="block text-xs font-medium text-gray-600 mb-1 capitalize">
+                                {input.replace(/_/g, ' ')} (mm)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={innerInputs[input] || ''}
+                                onChange={(e) => handleInnerInputChange(input, e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold text-gray-800 mb-3">Parametri di Input</h3>
+                    
+                    {needsDimensions && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                        {getShapeInputs(shape).map(input => (
+                          <div key={input}>
+                            <label className="block text-xs font-medium text-gray-600 mb-1 capitalize">
+                              {input.replace(/_/g, ' ')} (mm)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={inputs[input] || ''}
+                              onChange={(e) => handleInputChange(input, e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {needsVolume && (
+                      <div className="mb-3">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Volume (dm³)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={inputs.volume || ''}
+                          onChange={(e) => handleInputChange('volume', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+
+                    {needsWeight && (
+                      <div className="mb-3">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Peso (kg)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={inputs.peso || ''}
+                          onChange={(e) => handleInputChange('peso', e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+
+                    {needsDensity && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Materiale Esterno</label>
+                          <select 
+                            value={outerMaterial} 
+                            onChange={(e) => setOuterMaterial(e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="acciaio">Acciaio (7.85)</option>
+                            <option value="alluminio">Alluminio (2.70)</option>
+                            <option value="rame">Rame (8.96)</option>
+                            <option value="ottone">Ottone (8.50)</option>
+                            <option value="bronzo">Bronzo (8.80)</option>
+                            <option value="piombo">Piombo (11.34)</option>
+                            <option value="titanio">Titanio (4.51)</option>
+                            <option value="pvc">PVC (1.40)</option>
+                            <option value="poliuretano">Poliuretano (1.30)</option>
+                            <option value="legno">Legno quercia (0.75)</option>
+                            <option value="acqua">Acqua (1.00)</option>
+                            <option value="calcestruzzo">Calcestruzzo (2.40)</option>
+                            <option value="vetro">Vetro (2.50)</option>
+                            <option value="oro">Oro (19.32)</option>
+                            <option value="argento">Argento (10.49)</option>
+                            <option value="vuoto">Vuoto (0)</option>
+                            <option value="custom">Personalizzato</option>
+                          </select>
+                          {outerMaterial === 'custom' && (
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="Densità (kg/dm³)"
+                              value={customDensity}
+                              onChange={(e) => setCustomDensity(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                            />
+                          )}
+                        </div>
+
+                        {solidType === 'double_density' && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Materiale Interno</label>
+                            <select 
+                              value={innerMaterial} 
+                              onChange={(e) => setInnerMaterial(e.target.value)}
+                              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="aria">Aria (0.0012)</option>
+                              <option value="acqua">Acqua (1.00)</option>
+                              <option value="poliuretano">Poliuretano (1.30)</option>
+                              <option value="legno">Legno (0.75)</option>
+                              <option value="alluminio">Alluminio (2.70)</option>
+                              <option value="acciaio">Acciaio (7.85)</option>
+                              <option value="custom">Personalizzato</option>
+                            </select>
+                            {innerMaterial === 'custom' && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="Densità interna (kg/dm³)"
+                                value={customInnerDensity}
+                                onChange={(e) => setCustomInnerDensity(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {solidType !== 'solid' && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Densità Fluido per Archimede (kg/dm³)</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={fluidDensity}
+                          onChange={(e) => setFluidDensity(e.target.value)}
+                          className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+                    <h3 className="font-bold text-xl text-gray-800 mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Risultati
+                    </h3>
+                    {results.error ? (
+                      <p className="text-red-600">{results.error}</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Object.entries(results).map(([key, value]) => {
+                          if (key === 'unit') return null;
+                          return (
+                            <div key={key} className="bg-white p-3 rounded-lg shadow-sm">
+                              <p className="text-xs text-gray-600 capitalize">{key.replace(/_/g, ' ')}</p>
+                              <p className="text-lg font-bold text-gray-900">{value} {key.includes('superficie') ? 'm²' : key.includes('spinta') ? (key.includes('_N') ? 'N' : 'kgf') : results.unit}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setShowFormulas(!showFormulas)}
+                    className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    {showFormulas ? 'Nascondi Formule' : 'Mostra Formule'}
+                  </button>
+
+                  {showFormulas && (
+                    <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <h4 className="font-semibold text-gray-800 mb-2">Formule Utilizzate</h4>
+                      <p className="text-sm text-gray-700 whitespace-pre-line">
+                        {`Forma: ${shapes[shape]}
+Tipo calcolo: ${calcTypes[calcType]}
+Tipo solido: ${solidType === 'solid' ? 'Pieno' : solidType === 'hollow' ? 'Cavo' : 'Doppia Densità'}
+
+Volume = f(dimensioni) [in dm³]
+Superficie = g(dimensioni) [in m²]
+Peso = Volume × Densità [in kg]
+Densità = Peso / Volume [in kg/dm³]
+Spinta Archimede = ρ_fluido × V_immerso × 9.81 [in N]
+
+Nota: Le dimensioni sono inserite in mm e convertite
